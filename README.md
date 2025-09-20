@@ -1,4 +1,19 @@
-# Todoist Subtask Generator
+# To## 📋 Bakım Günlüğü
+
+### 2025-09-20: GitHub Community Standards ve Professional Setup ✅
+- ✅ Kapsamlı güvenlik taraması tamamlandı (hassas veri bulunamadı)
+- ✅ README'ye ekran görüntüleri bölümü eklendi (4 adet görsel)
+- ✅ GitHub community standards dokümanları eklendi:
+  - CODE_OF_CONDUCT.md (Contributor Covenant guidelines)
+  - CONTRIBUTING.md (detaylı katkı rehberi ve coding standards)
+  - LICENSE (MIT open source license)
+  - SECURITY.md (güvenlik açığı bildirimi süreci)
+  - GitHub issue templates (bug report, feature request, question)
+  - Pull request template (comprehensive checklist)
+- ✅ Professional repository structure kuruldu
+- ✅ Archive klasörü düzenlendi ve .gitignore güncellenidi
+- ✅ Build süreci test edildi ve başarılı
+- ✅ GitHub'a güvenli push işlemi tamamlandıtask Generator
 
 Todoist üzerindeki task'ları seçerek **AI (Türkçe)** yardımıyla mantıklı alt görevlere (subtask) bölen, zaman çizelgesi (schedule) hesaplayan ve son tarihe göre akıllı tarih dağıtımı yapan bir uygulama. Modern web arayüzü ile gelişmiş filtreleme (proje, etiket, öncelik, tarih, arama) sunar.
 
