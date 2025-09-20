@@ -1,0 +1,8 @@
+archive/
+*.log
+*.tmp
+test_*
+draft_*
+.env
+.env.local
+.env.*
