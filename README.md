@@ -2,7 +2,17 @@
 
 Todoist üzerindeki task'ları seçerek **AI (Türkçe)** yardımıyla mantıklı alt görevlere (subtask) bölen, zaman çizelgesi (schedule) hesaplayan ve son tarihe göre akıllı tarih dağıtımı yapan bir uygulama. Modern web arayüzü ile gelişmiş filtreleme (proje, etiket, öncelik, tarih, arama) sunar.
 
-## 🚀 Özellikler
+## � Bakım Günlüğü
+
+### 2025-09-20: Repository Güvenlik Kontrolü ve Dokümantasyon Güncellemesi ✅
+- ✅ Kapsamlı güvenlik taraması tamamlandı (hassas veri bulunamadı)
+- ✅ README'ye ekran görüntüleri bölümü eklendi (4 adet görsel)
+- ✅ Proje dokümantasyonu geliştirildi
+- ✅ Archive klasörü düzenlendi ve .gitignore güncellenidi
+- ✅ Build süreci test edildi ve başarılı
+- ✅ GitHub'a güvenli push işlemi tamamlandı
+
+## ⚡ Hızlı Başlangıç
 
 - **Gelişmiş Web Arayüzü**: Proje, etiket, öncelik, tarih (bugün / 7 gün / 30 gün / geciken / aralık) ve arama filtreleri
 - **Türkçe AI Subtask Üretimi**: OpenRouter üzerinden Türkçe içerik ve açıklamalarla alt görev üretimi
