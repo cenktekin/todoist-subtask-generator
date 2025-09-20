@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AIService = void 0;
 const axios_1 = __importDefault(require("axios"));
 const config_1 = require("../config/config");
+const json_repair_1 = require("../utils/json-repair");
 class AIService {
     constructor() {
         this.availableModels = [];
@@ -40,18 +41,24 @@ class AIService {
         }
     }
     async generateSubtasks(request) {
-        const { taskContent, taskDescription, dueDate, maxSubtasks } = request;
+        const { taskContent, taskDescription, dueDate, maxSubtasks, additionalContext } = request;
         const systemPrompt = `Sen bir görev yönetimi uzmanısın. Ana görevi daha küçük, yönetilebilir alt görevlere ayırman gerekiyor.
 
-Kurallar:
-1. Görevi bağımsız olarak tamamlanabilecek mantıklı alt görevlere böl
-2. Her alt görev spesifik ve eyleme dönük olmalı
-3. Alt görevleri kısa ama açıklayıcı tut
-4. Tam olarak ${maxSubtasks || config_1.config.subtaskGeneration.maxSubtasks} alt görev döndür
-5. Görev basitse, daha az ama daha anlamlı alt görevler oluştur
-6. Alt görevleri planlarken son tarihi dikkate al (sağlanmışsa)
-7. Yanıtı sadece JSON formatında döndür
-8. TÜM ALT GÖREVLERİ TÜRKÇE YAZ
+TASK COMPLEXİTY ANALİZİ:
+- Basit görevler (örn: "dosya gönder", "email yaz"): 3-6 alt görev
+- Orta görevler (örn: "rapor hazırla", "toplantı organize et"): 6-12 alt görev  
+- Karmaşık görevler (örn: "proje geliştir", "sistem oluştur"): 12-${maxSubtasks || config_1.config.subtaskGeneration.maxSubtasks} alt görev
+
+KURALLAR:
+1. Görevin gerçek karmaşıklığını değerlendir - küçük görevleri 20 alt göreve bölme!
+2. Görevi bağımsız olarak tamamlanabilecek mantıklı alt görevlere böl
+3. Her alt görev spesifik ve eyleme dönük olmalı
+4. Alt görevleri kısa ama açıklayıcı tut
+5. Gereksiz alt görev oluşturma, her biri değerli ve gerekli olmalı
+6. Maksimum limit: ${maxSubtasks || config_1.config.subtaskGeneration.maxSubtasks} alt görev
+7. Alt görevleri planlarken son tarihi dikkate al (sağlanmışsa)
+8. Yanıtı sadece JSON formatında döndür
+9. TÜM ALT GÖREVLERİ TÜRKÇE YAZ
 
 Yanıt formatı:
 {
@@ -69,31 +76,60 @@ Ana Görev: ${taskContent}
 ${taskDescription ? `Açıklama: ${taskDescription}` : ''}
 ${dueDate ? `Son Tarih: ${dueDate}` : ''}
 ${maxSubtasks ? `Maksimum Alt Görev: ${maxSubtasks}` : ''}
+${additionalContext ? `Ek Bağlam: ${additionalContext}` : ''}
 
 ÖNEMLI: Her alt görev için uygun tarihleri öner:
-- Bugün: 2025-09-20
+- Bugün: ${new Date().toISOString().split('T')[0]}
 - Ana görevin son tarihi: ${dueDate || 'Belirtilmemiş'}
-- Alt görevleri bu tarih aralığında mantıklı şekilde dağıt
-- Önce yapılması gerekenler için daha erken tarihler ver
+- Alt görevleri BUGÜNDEN İTİBAREN bu tarih aralığında mantıklı şekilde dağıt
+- Geçmiş tarihlere alt görev verme, sadece bugün ve gelecek tarihler kullan
+- Önce yapılması gerekenler için daha erken tarihler ver (ama bugünden önce değil)
 - Karmaşık alt görevler için daha fazla zaman ver
 
 Lütfen bu görevi yukarıdaki kurallara uyarak alt görevlere böl. Alt görevlerin tamamı Türkçe olmalı.
 `;
-        try {
-            let response = await this.callOpenAI(systemPrompt, userPrompt, config_1.config.openrouter.defaultModel);
-            if (!response) {
-                console.warn('Default model failed, trying fallback model...');
-                response = await this.callOpenAI(systemPrompt, userPrompt, config_1.config.openrouter.fallbackModel);
+        const triedModels = [];
+        const modelsToTry = [config_1.config.openrouter.defaultModel, config_1.config.openrouter.fallbackModel]
+            .filter((m, i, arr) => arr.indexOf(m) === i);
+        let lastError = null;
+        const MAX_PARSE_ATTEMPTS_PER_MODEL = 2;
+        for (const model of modelsToTry) {
+            triedModels.push(model);
+            let attempt = 0;
+            let augmentedUserPrompt = userPrompt;
+            while (attempt < MAX_PARSE_ATTEMPTS_PER_MODEL) {
+                attempt++;
+                try {
+                    const response = await this.callOpenAI(systemPrompt, augmentedUserPrompt, model);
+                    if (!response) {
+                        throw new Error(`Model ${model} returned empty response`);
+                    }
+                    const rawContent = response.data?.choices?.[0]?.message?.content;
+                    if (!rawContent) {
+                        throw new Error(`Model ${model} produced no content`);
+                    }
+                    try {
+                        return this.parseAIResponse(rawContent);
+                    }
+                    catch (parseErr) {
+                        if (attempt < MAX_PARSE_ATTEMPTS_PER_MODEL) {
+                            console.warn(`Parse attempt ${attempt} failed for model ${model}: ${parseErr.message}. Regenerating...`);
+                            augmentedUserPrompt = userPrompt + '\n\nÖNEMLI: Önceki yanıt JSON formatında tamamlanmadı. Lütfen SADECE geçerli JSON döndür.';
+                            continue;
+                        }
+                        throw parseErr;
+                    }
+                }
+                catch (err) {
+                    lastError = err instanceof Error ? err : new Error(String(err));
+                    console.warn(`Model ${model} attempt ${attempt} failed: ${lastError.message}`);
+                    if (attempt >= MAX_PARSE_ATTEMPTS_PER_MODEL) {
+                        break;
+                    }
+                }
             }
-            if (!response) {
-                throw new Error('Both default and fallback AI models failed');
-            }
-            return this.parseAIResponse(response.data.choices[0].message.content);
         }
-        catch (error) {
-            console.error('AI subtask generation failed:', error);
-            throw new Error(`Failed to generate subtasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
+        throw new Error(`Failed to generate subtasks after trying models (${triedModels.join(', ')}): ${lastError?.message}`);
     }
     async callOpenAI(systemPrompt, userPrompt, model) {
         try {
@@ -119,8 +155,7 @@ Lütfen bu görevi yukarıdaki kurallara uyarak alt görevlere böl. Alt görevl
     }
     parseAIResponse(content) {
         try {
-            const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-            const parsed = JSON.parse(cleanContent);
+            const parsed = (0, json_repair_1.safeParseJson)(content);
             if (!parsed.subtasks || !Array.isArray(parsed.subtasks)) {
                 throw new Error('Invalid AI response: missing or invalid subtasks array');
             }
@@ -141,7 +176,7 @@ Lütfen bu görevi yukarıdaki kurallara uyarak alt görevlere böl. Alt görevl
             };
         }
         catch (error) {
-            console.error('Failed to parse AI response:', error);
+            console.error('Failed to parse AI response (truncated preview):', content.slice(0, 200));
             throw new Error(`Invalid AI response format: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }

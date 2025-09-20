@@ -1,8 +1,10 @@
-import { TodoistTask, TodoistProject, TodoistLabel, TodoistUser, CreateTaskRequest, UpdateTaskRequest, TaskFilterOptions, TasksResponse } from './types';
+import { TodoistTask, TodoistProject, TodoistLabel, CreateTaskRequest, UpdateTaskRequest, TaskFilterOptions, TasksResponse } from './types';
 export declare class TodoistClient {
     private client;
     private rateLimitRemaining;
     private rateLimitReset;
+    private isUnifiedApi;
+    private tokenPlaceholder;
     constructor(apiToken?: string);
     private delayRetry;
     private checkRateLimit;
@@ -16,7 +18,7 @@ export declare class TodoistClient {
     getProjects(): Promise<TodoistProject[]>;
     getProject(projectId: string): Promise<TodoistProject>;
     getLabels(): Promise<TodoistLabel[]>;
-    getUser(): Promise<TodoistUser>;
+    testConnection(): Promise<boolean>;
     createTasksBatch(tasks: CreateTaskRequest[]): Promise<TodoistTask[]>;
     getTasksWithProjectsAndLabels(): Promise<TasksResponse>;
     getTasksByProject(projectId: string): Promise<TodoistTask[]>;
@@ -28,5 +30,7 @@ export declare class TodoistClient {
         remaining: number;
         reset: number;
     };
+    private normalizeListResponse;
+    private fetchAllPages;
 }
 //# sourceMappingURL=todoist-client.d.ts.map

@@ -1,9 +1,17 @@
 let selectedTaskId = null;
 let tasks = [];
+let filteredTasksCache = []; // cache after API + filter + search
 let subtaskCandidates = [];
 let projects = [];
 let labels = [];
 let currentFilters = {};
+let currentSearch = '';
+
+// THEME + DENSITY STATE (persisted)
+const STORAGE_KEYS = {
+    THEME: 'tsg_theme',
+    DENSITY: 'tsg_density'
+};
 
 // Helper function to extract date string from various due date formats
 function getTaskDateString(due) {
@@ -115,11 +123,65 @@ function filterTasksClientSide(allTasks, filters) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
+    restorePreferences();
+    wireSearch();
+    wireKeyboardShortcuts();
     loadHealth();
     loadProjects();
     loadLabels();
     loadTasks();
 });
+
+function restorePreferences() {
+    try {
+        const theme = localStorage.getItem(STORAGE_KEYS.THEME);
+        if (theme === 'dark') {
+            document.body.classList.add('dark');
+            const themeToggle = document.getElementById('themeToggle');
+            if (themeToggle) themeToggle.textContent = '☀️';
+        }
+        const density = localStorage.getItem(STORAGE_KEYS.DENSITY);
+        if (density === 'compact') {
+            document.body.classList.add('compact');
+        }
+    } catch (e) { console.warn('Prefs restore failed', e); }
+}
+
+function wireSearch() {
+    const input = document.getElementById('searchInput');
+    if (!input) return;
+    input.addEventListener('input', () => {
+        currentSearch = input.value.trim().toLowerCase();
+        renderTasks();
+    });
+}
+
+function wireKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            const input = document.getElementById('searchInput');
+            if (input) {
+                input.focus();
+                input.select();
+            }
+        }
+    });
+}
+
+function toggleTheme() {
+    document.body.classList.toggle('dark');
+    const dark = document.body.classList.contains('dark');
+    try { localStorage.setItem(STORAGE_KEYS.THEME, dark ? 'dark' : 'light'); } catch {}
+    const themeToggle = document.getElementById('themeToggle');
+    if (themeToggle) themeToggle.textContent = dark ? '☀️' : '🌙';
+}
+
+function toggleDensity() {
+    document.body.classList.toggle('compact');
+    const compact = document.body.classList.contains('compact');
+    try { localStorage.setItem(STORAGE_KEYS.DENSITY, compact ? 'compact' : 'comfortable'); } catch {}
+}
 
 async function loadHealth() {
     try {
@@ -150,7 +212,8 @@ async function loadHealth() {
 async function loadProjects() {
     try {
         const response = await fetch('/api/projects');
-        projects = await response.json();
+        const data = await response.json();
+        projects = Array.isArray(data) ? data : [];
         
         const projectFilter = document.getElementById('projectFilter');
         projectFilter.innerHTML = '<option value="">Tüm Projeler</option>';
@@ -170,7 +233,8 @@ async function loadProjects() {
 async function loadLabels() {
     try {
         const response = await fetch('/api/labels');
-        labels = await response.json();
+        const data = await response.json();
+        labels = Array.isArray(data) ? data : [];
         
         const labelFilter = document.getElementById('labelFilter');
         labelFilter.innerHTML = '<option value="">Tüm Etiketler</option>';
@@ -268,41 +332,65 @@ async function loadTasks(filters = {}) {
         }
         
         tasks = apiTasks;
-        
-        // Ensure tasks is an array
-        const tasksArray = Array.isArray(tasks) ? tasks : [];
-        
-        if (tasksArray.length === 0) {
-            taskList.innerHTML = '<div class="loading">Filtre kriterlerine uygun task bulunamadı</div>';
-            return;
-        }
-        
-        taskList.innerHTML = tasksArray.map(task => {
-            const dueInfo = getDueInfo(task.due);
-            const priorityInfo = getPriorityInfo(task.priority);
-            
-            return `
-                <div class="task-item" onclick="selectTask('${task.id}', this)">
-                    <div class="task-main">
-                        <div class="task-content">${task.content}</div>
-                        <div class="task-meta">
-                            ${getProjectInfo(task)}
-                            ${getLabelInfo(task)}
-                            ${dueInfo.text ? `📅 ${dueInfo.text}` : ''}
-                        </div>
-                    </div>
-                    <div class="task-badges">
-                        ${priorityInfo.html}
-                        ${dueInfo.badge}
-                    </div>
-                </div>
-            `;
-        }).join('');
+        renderTasks();
         
     } catch (error) {
         console.error('Failed to load tasks:', error);
         taskList.innerHTML = '<div class="error">Task\'lar yüklenemedi</div>';
     }
+}
+
+function renderTasks() {
+    const taskList = document.getElementById('taskList');
+    if (!Array.isArray(tasks) || tasks.length === 0) {
+        taskList.innerHTML = '<div class="loading">Filtre kriterlerine uygun task bulunamadı</div>';
+        updateTaskCount(0);
+        return;
+    }
+    // Apply search
+    let display = tasks;
+    if (currentSearch) {
+        display = tasks.filter(t => (t.content || '').toLowerCase().includes(currentSearch));
+    }
+    filteredTasksCache = display;
+    updateTaskCount(display.length);
+    taskList.innerHTML = display.map(task => buildTaskHtml(task)).join('');
+    updateSelectionActionsVisibility();
+}
+
+function buildTaskHtml(task) {
+    const dueInfo = getDueInfo(task.due);
+    const priorityInfo = getPriorityInfo(task.priority);
+    return `
+        <div class="task-item" data-task-id="${task.id}" onclick="selectTask('${task.id}', this)">
+            <div class="task-main">
+                <div class="task-content" title="${escapeHtml(task.content)}">${escapeHtml(task.content)}</div>
+                <div class="task-meta">
+                    ${getProjectInfo(task)}
+                    ${getLabelInfo(task)}
+                    ${dueInfo.text ? `📅 ${dueInfo.text}` : ''}
+                </div>
+            </div>
+            <div class="task-badges">
+                ${priorityInfo.html}
+                ${dueInfo.badge}
+            </div>
+        </div>`;
+}
+
+function escapeHtml(str='') {
+    return str.replace(/[&<>"]+/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function updateTaskCount(n) {
+    const el = document.getElementById('taskCount');
+    if (el) el.textContent = n ? n : '0';
+}
+
+function updateSelectionActionsVisibility() {
+    const actions = document.getElementById('selectionActions');
+    if (!actions) return;
+    actions.style.display = selectedTaskId ? 'flex' : 'none';
 }
 
 function getDueInfo(due) {
@@ -452,6 +540,7 @@ function selectTask(taskId, element) {
     document.getElementById('createBtn').disabled = false;
     document.getElementById('scheduleBtn').disabled = false;
     document.getElementById('candidatesBtn').disabled = false;
+    updateSelectionActionsVisibility();
 }
 
 async function showSubtaskPreview() {
@@ -492,31 +581,46 @@ async function createSubtasks() {
         return;
     }
     
-    if (!confirm('Seçilen task için subtask oluşturulacak. Devam etmek istiyor musunuz?')) {
-        return;
-    }
+    // Open context modal instead of confirm
+    document.getElementById('additionalContext').value = '';
+    document.getElementById('contextModal').style.display = 'block';
+}
+
+async function proceedWithSubtasks() {
+    const additionalContext = document.getElementById('additionalContext').value.trim();
+    // Tarihlendirme özellikleri geçici olarak devre dışı
+    const enableScheduling = false; // document.getElementById('enableScheduling').checked;
+    
+    closeModal('contextModal');
     
     try {
+        const requestBody = {
+            maxSubtasks: 25, // Görevin karmaşıklığına göre AI karar verecek (3-25 arası)
+            includeSchedule: false, // enableScheduling,
+            distributeByTime: false, // enableScheduling,
+            timeDistribution: 'equal', // enableScheduling ? document.getElementById('timeDistribution').value : 'equal',
+            maxSubtasksPerDay: 2, // enableScheduling ? parseInt(document.getElementById('maxSubtasksPerDay').value) : 2,
+            includeWeekends: false, // enableScheduling ? document.getElementById('includeWeekends').checked : false,
+            priorityStrategy: 'inherit'
+        };
+        
+        if (additionalContext) {
+            requestBody.additionalContext = additionalContext;
+        }
+        
         const response = await fetch(`/api/tasks/${selectedTaskId}/subtasks`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                maxSubtasks: 10,
-                includeSchedule: true,
-                distributeByTime: true,
-                timeDistribution: 'equal', // 'equal', 'sequential', 'weighted'
-                maxSubtasksPerDay: 3,
-                includeWeekends: false,
-                priorityStrategy: 'inherit'
-            })
+            body: JSON.stringify(requestBody)
         });
         
         const result = await response.json();
         
         if (response.ok) {
-            showMessage(`${result.subtasksCreated} adet subtask oluşturuldu`, 'success');
+            const scheduleInfo = enableScheduling ? ' (tarihlendirilerek)' : '';
+            showMessage(`✅ ${result.subtasksCreated} adet subtask oluşturuldu${scheduleInfo}`, 'success');
             closeModal('previewModal');
             loadTasks(currentFilters); // Refresh task list with current filters
         } else {
@@ -543,6 +647,11 @@ async function showSchedule() {
         const content = document.getElementById('scheduleContent');
         
         content.innerHTML = `
+            <div class="schedule-info">
+                <p><strong>💡 Zaman Çizelgesi Önizlemesi</strong></p>
+                <p>Bu önizleme, seçtiğiniz görevin alt görevlerinin tarihlere nasıl dağıtılacağını gösterir. Ana "Oluştur" butonunda tarihlendirme seçeneğini aktifleştirerek subtask'larınızı otomatik olarak tarihlendirip oluşturabilirsiniz.</p>
+            </div>
+            
             <div class="schedule-summary">
                 <h3>📊 Özet</h3>
                 <div class="summary-grid">
@@ -591,6 +700,11 @@ async function showSchedule() {
                     `).join('')}
                 </div>
             </div>
+            
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('scheduleModal')">İptal</button>
+                <button class="btn btn-primary" onclick="createSubtasksWithSchedule()">📅 Bu Çizelge ile Oluştur</button>
+            </div>
         `;
         
         modal.style.display = 'block';
@@ -598,6 +712,52 @@ async function showSchedule() {
     } catch (error) {
         console.error('Failed to show schedule:', error);
         showMessage('Zaman çizelgesi oluşturulamadı', 'error');
+    }
+}
+
+async function createSubtasksWithSchedule() {
+    if (!selectedTaskId) {
+        showMessage('Lütfen bir task seçin', 'error');
+        return;
+    }
+    
+    if (!confirm('Bu zaman çizelgesine göre subtask\'lar oluşturulacak. Devam etmek istiyor musunuz?')) {
+        return;
+    }
+    
+    closeModal('scheduleModal');
+    
+    try {
+        const requestBody = {
+            maxSubtasks: 25, // Görevin karmaşıklığına göre AI karar verecek (3-25 arası)
+            includeSchedule: false, // Tarihlendirme devre dışı
+            distributeByTime: false, // Tarihlendirme devre dışı
+            timeDistribution: 'equal', // Çizelge modunda eşit dağıtım
+            maxSubtasksPerDay: 2,
+            includeWeekends: false,
+            priorityStrategy: 'inherit'
+        };
+        
+        const response = await fetch(`/api/tasks/${selectedTaskId}/subtasks`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(`✅ ${result.subtasksCreated} adet subtask zaman çizelgesine göre oluşturuldu!`, 'success');
+            loadTasks(currentFilters); // Refresh task list with current filters
+        } else {
+            showMessage(result.error || 'Subtask oluşturulamadı', 'error');
+        }
+        
+    } catch (error) {
+        console.error('Failed to create subtasks with schedule:', error);
+        showMessage('Zaman çizelgeli subtask oluşturulamadı', 'error');
     }
 }
 
@@ -640,16 +800,21 @@ function showMessage(message, type) {
     const messageDiv = document.createElement('div');
     messageDiv.className = type;
     messageDiv.textContent = message;
+    // Prefer inserting into content area header
+    const container = document.querySelector('.content-header') || document.body;
+    container.parentNode.insertBefore(messageDiv, container.nextSibling);
+    setTimeout(() => { messageDiv.remove(); }, 5000);
+}
+
+function toggleScheduleOptions() {
+    const enableScheduling = document.getElementById('enableScheduling').checked;
+    const scheduleSettings = document.getElementById('scheduleSettings');
     
-    // Insert message at the top of main-content
-    const mainContent = document.querySelector('.main-content');
-    const firstSection = mainContent.querySelector('.section');
-    mainContent.insertBefore(messageDiv, firstSection);
-    
-    // Remove message after 5 seconds
-    setTimeout(() => {
-        messageDiv.remove();
-    }, 5000);
+    if (enableScheduling) {
+        scheduleSettings.style.display = 'block';
+    } else {
+        scheduleSettings.style.display = 'none';
+    }
 }
 
 // Close modals when clicking outside

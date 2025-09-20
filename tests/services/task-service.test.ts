@@ -2,18 +2,30 @@ import { TaskService } from '../../src/services/task-service';
 import { TodoistClient } from '../../src/api/todoist-client';
 import { mockTodoistData } from '../setup';
 
-// Mock TodoistClient
-jest.mock('../../src/api/todoist-client');
-const MockedTodoistClient = TodoistClient as jest.MockedClass<typeof TodoistClient>;
+// Mock TodoistClient with only methods we use
+jest.mock('../../src/api/todoist-client', () => {
+  return {
+    TodoistClient: jest.fn().mockImplementation(() => ({
+      getTasks: jest.fn(),
+      getTask: jest.fn(),
+      getProjects: jest.fn(),
+      getLabels: jest.fn(),
+    }))
+  };
+});
+const { TodoistClient: MockedTodoistClient } = jest.requireMock('../../src/api/todoist-client');
 
 describe('TaskService', () => {
   let taskService: TaskService;
-  let mockTodoistClient: jest.Mocked<TodoistClient>;
+  let mockTodoistClient: any;
 
   beforeEach(() => {
     mockTodoistClient = new MockedTodoistClient();
     taskService = new TaskService(mockTodoistClient);
     jest.clearAllMocks();
+    // Default mocks
+    mockTodoistClient.getProjects.mockResolvedValue(require('../setup').mockTodoistData.projects);
+    mockTodoistClient.getLabels.mockResolvedValue(require('../setup').mockTodoistData.labels);
   });
 
   describe('getTasksWithFilters', () => {
@@ -106,8 +118,8 @@ describe('TaskService', () => {
   describe('getTasksForSubtaskGeneration', () => {
     it('should return tasks suitable for subtask generation', async () => {
       const tasksWithSubtasks = [
-        { ...mockTodoistData.tasks[0], children: [{ id: 'sub1', content: 'Subtask' }] },
-        mockTodoistData.tasks[1], // This one should be included
+        { ...mockTodoistData.tasks[0], children: [{ ...mockTodoistData.tasks[0], id: 'sub1' }] },
+        mockTodoistData.tasks[1],
       ];
 
       mockTodoistClient.getTasks.mockResolvedValue(tasksWithSubtasks);

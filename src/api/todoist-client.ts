@@ -17,6 +17,8 @@ export class TodoistClient {
   private client: AxiosInstance;
   private rateLimitRemaining: number = 60;
   private rateLimitReset: number = Date.now();
+  private isUnifiedApi: boolean = false; // Heuristik: /api/v1 tabanlı endpoint kullanımı
+  private tokenPlaceholder: boolean = false;
 
   constructor(apiToken?: string) {
     const token = apiToken || config.todoist.apiToken;
@@ -25,14 +27,29 @@ export class TodoistClient {
       throw new Error('Todoist API token is required');
     }
 
+    // Use configured base URL (defaults to REST v2). Centralize in config to allow future migration.
     this.client = axios.create({
-      baseURL: 'https://api.todoist.com/rest/v2',
+      baseURL: config.todoist.baseUrl || 'https://api.todoist.com/rest/v2',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       timeout: 30000,
     });
+
+    // API sürümü belirleme (basit heuristic)
+    // Yeni birleşik API: https://api.todoist.com/api/v1/... (pagination ve {results: []} yapısı)
+    // Eski REST v2: https://api.todoist.com/rest/v2/... (düz array)
+    if ((config.todoist.baseUrl || '').includes('/api/v1')) {
+      this.isUnifiedApi = true;
+    }
+
+    // Placeholder token kontrolü (geliştirici deneyimi için erken uyarı)
+    if (/your_todoist_api_token_here/i.test(token)) {
+      this.tokenPlaceholder = true;
+      // eslint-disable-next-line no-console
+      console.warn('[TodoistClient] Placeholder TODOIST_API_TOKEN kullanılıyor. Gerçek token ile değiştirin. (401 Unauthorized alırsınız)');
+    }
 
     // Response interceptor for rate limiting and error handling
     this.client.interceptors.response.use(
@@ -100,9 +117,13 @@ export class TodoistClient {
   async getTasks(filterOptions: TaskFilterOptions = {}): Promise<TodoistTask[]> {
     await this.checkRateLimit();
     
-    const params: Record<string, string> = {
-      lang: 'tr',
-    };
+    const params: Record<string, string> = {};
+
+    // Birleşik API v1 dokümantasyonuna göre /tasks endpoint'inde lang parametresi kaldırıldı.
+    // Eski REST v2 için lang parametresi sorun çıkarmazsa ekleyebiliriz; yalnızca REST v2 ise ekleyelim.
+    if (!this.isUnifiedApi) {
+      params.lang = 'tr';
+    }
 
     if (filterOptions.project_id) {
       params.project_id = filterOptions.project_id;
@@ -116,8 +137,8 @@ export class TodoistClient {
       params.filter = filterOptions.filter;
     }
 
-    const response = await this.client.get<TodoistTask[]>('/tasks', { params });
-    return response.data;
+    const response = await this.client.get<any>('/tasks', { params });
+    return this.normalizeListResponse<TodoistTask>(response.data);
   }
 
   async getTask(taskId: string): Promise<TodoistTask> {
@@ -165,8 +186,8 @@ export class TodoistClient {
   async getProjects(): Promise<TodoistProject[]> {
     await this.checkRateLimit();
     
-    const response = await this.client.get<TodoistProject[]>('/projects');
-    return response.data;
+    const response = await this.client.get<any>('/projects');
+    return this.normalizeListResponse<TodoistProject>(response.data);
   }
 
   async getProject(projectId: string): Promise<TodoistProject> {
@@ -180,16 +201,28 @@ export class TodoistClient {
   async getLabels(): Promise<TodoistLabel[]> {
     await this.checkRateLimit();
     
-    const response = await this.client.get<TodoistLabel[]>('/labels');
-    return response.data;
+    const response = await this.client.get<any>('/labels');
+    return this.normalizeListResponse<TodoistLabel>(response.data);
   }
 
-  // User Operations
-  async getUser(): Promise<TodoistUser> {
-    await this.checkRateLimit();
-    
-    const response = await this.client.get<TodoistUser>('/user');
-    return response.data;
+  // There is no /user endpoint in REST v2; a connectivity check can instead fetch projects (lightweight)
+  async testConnection(): Promise<boolean> {
+    try {
+      await this.checkRateLimit();
+      // Küçük bir istek: projeleri bir sayfa çek (pagination varsa ilk sayfa yeterli)
+      const res = await this.client.get('/projects', { params: this.isUnifiedApi ? { limit: 1 } : undefined });
+      // 401 özel bilgilendirme
+      if (res.status === 200) {
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      if (e?.response?.status === 401 && this.tokenPlaceholder) {
+        // eslint-disable-next-line no-console
+        console.error('[TodoistClient] 401 Unauthorized: Placeholder token tespit edildi. Geçerli TODOIST_API_TOKEN .env dosyasına ekleyin.');
+      }
+      return false;
+    }
   }
 
   // Batch Operations
@@ -275,5 +308,38 @@ export class TodoistClient {
       remaining: this.rateLimitRemaining,
       reset: this.rateLimitReset,
     };
+  }
+
+  // ---- İç Yardımcılar ----
+  private normalizeListResponse<T>(data: any): T[] {
+    // REST v2: doğrudan array
+    if (Array.isArray(data)) return data as T[];
+    // Unified API v1: { results: [...], next_cursor?: string }
+    if (data && Array.isArray(data.results)) return data.results as T[];
+    // Bilinmeyen şekil -> boş liste
+    return [];
+  }
+
+  // (Gerektiğinde genişletmek için) Unified API pagination tam almak istenirse kullanılabilir
+  private async fetchAllPages<T>(path: string, params: Record<string, any> = {}): Promise<T[]> {
+    if (!this.isUnifiedApi) {
+      const res = await this.client.get<any>(path, { params });
+      return this.normalizeListResponse<T>(res.data);
+    }
+
+    const all: T[] = [];
+    let cursor: string | undefined = undefined;
+    let safety = 0;
+    do {
+      const pageParams = { ...params } as any;
+      if (cursor) pageParams.cursor = cursor;
+      if (!pageParams.limit) pageParams.limit = 200; // az sayıda call ile maksimum
+      const res = await this.client.get<any>(path, { params: pageParams });
+      const items = this.normalizeListResponse<T>(res.data);
+      all.push(...items);
+      cursor = res.data?.next_cursor;
+      safety++;
+    } while (cursor && safety < 20); // 20 sayfa güvenlik limiti
+    return all;
   }
 }

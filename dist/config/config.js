@@ -10,7 +10,7 @@ dotenv_1.default.config();
 exports.config = {
     todoist: {
         apiToken: process.env.TODOIST_API_TOKEN || '',
-        baseUrl: 'https://api.todoist.com/rest/v1',
+        baseUrl: 'https://api.todoist.com/rest/v2',
         rateLimit: {
             requestsPerMinute: 60,
             requestsPerHour: 1000,
@@ -39,7 +39,7 @@ exports.config = {
         batchSize: parseInt(process.env.BATCH_SIZE || '10'),
     },
     subtaskGeneration: {
-        maxSubtasks: parseInt(process.env.MAX_SUBTASKS || '10'),
+        maxSubtasks: parseInt(process.env.MAX_SUBTASKS || '25'),
         minSubtaskLength: parseInt(process.env.MIN_SUBTASK_LENGTH || '5'),
         maxSubtaskLength: parseInt(process.env.MAX_SUBTASK_LENGTH || '100'),
     },

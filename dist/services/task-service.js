@@ -8,11 +8,16 @@ class TaskService {
     async getTasksWithFilters(filters = {}) {
         try {
             let tasks = await this.todoistClient.getTasks();
+            let labelsData = null;
             if (filters.projectId) {
                 tasks = tasks.filter(task => task.project_id === filters.projectId);
             }
             if (filters.label) {
-                tasks = tasks.filter(task => task.labels.includes(filters.label));
+                labelsData = labelsData || await this.todoistClient.getLabels();
+                const target = filters.label.toLowerCase();
+                const labelObj = labelsData.find(l => l.name.toLowerCase() === target || l.id === filters.label);
+                const labelId = labelObj ? labelObj.id : filters.label;
+                tasks = tasks.filter(task => task.labels.includes(labelId));
             }
             if (filters.priority) {
                 tasks = tasks.filter(task => task.priority === filters.priority);
@@ -62,7 +67,7 @@ class TaskService {
             }
             const [projects, labels] = await Promise.all([
                 this.todoistClient.getProjects(),
-                this.todoistClient.getLabels(),
+                labelsData ? Promise.resolve(labelsData) : this.todoistClient.getLabels(),
             ]);
             const taskSummaries = tasks.map(task => ({
                 id: task.id,
@@ -246,10 +251,8 @@ class TaskService {
         });
     }
     async getHighPriorityTasks() {
-        return this.getTasksWithFilters({
-            status: 'active',
-            priority: 4
-        });
+        const tasks = await this.getTasksWithFilters({ status: 'active' });
+        return tasks.filter(t => t.priority >= 3);
     }
     async getTasksWithoutDueDate() {
         return this.getTasksWithFilters({

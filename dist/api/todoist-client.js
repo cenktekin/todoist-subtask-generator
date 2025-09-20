@@ -10,18 +10,27 @@ class TodoistClient {
     constructor(apiToken) {
         this.rateLimitRemaining = 60;
         this.rateLimitReset = Date.now();
+        this.isUnifiedApi = false;
+        this.tokenPlaceholder = false;
         const token = apiToken || config_1.config.todoist.apiToken;
         if (!token) {
             throw new Error('Todoist API token is required');
         }
         this.client = axios_1.default.create({
-            baseURL: 'https://api.todoist.com/rest/v2',
+            baseURL: config_1.config.todoist.baseUrl || 'https://api.todoist.com/rest/v2',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
             },
             timeout: 30000,
         });
+        if ((config_1.config.todoist.baseUrl || '').includes('/api/v1')) {
+            this.isUnifiedApi = true;
+        }
+        if (/your_todoist_api_token_here/i.test(token)) {
+            this.tokenPlaceholder = true;
+            console.warn('[TodoistClient] Placeholder TODOIST_API_TOKEN kullanılıyor. Gerçek token ile değiştirin. (401 Unauthorized alırsınız)');
+        }
         this.client.interceptors.response.use((response) => {
             const remaining = response.headers['x-ratelimit-remaining'];
             const reset = response.headers['x-ratelimit-reset'];
@@ -70,9 +79,10 @@ class TodoistClient {
     }
     async getTasks(filterOptions = {}) {
         await this.checkRateLimit();
-        const params = {
-            lang: 'tr',
-        };
+        const params = {};
+        if (!this.isUnifiedApi) {
+            params.lang = 'tr';
+        }
         if (filterOptions.project_id) {
             params.project_id = filterOptions.project_id;
         }
@@ -83,7 +93,7 @@ class TodoistClient {
             params.filter = filterOptions.filter;
         }
         const response = await this.client.get('/tasks', { params });
-        return response.data;
+        return this.normalizeListResponse(response.data);
     }
     async getTask(taskId) {
         await this.checkRateLimit();
@@ -117,7 +127,7 @@ class TodoistClient {
     async getProjects() {
         await this.checkRateLimit();
         const response = await this.client.get('/projects');
-        return response.data;
+        return this.normalizeListResponse(response.data);
     }
     async getProject(projectId) {
         await this.checkRateLimit();
@@ -127,12 +137,23 @@ class TodoistClient {
     async getLabels() {
         await this.checkRateLimit();
         const response = await this.client.get('/labels');
-        return response.data;
+        return this.normalizeListResponse(response.data);
     }
-    async getUser() {
-        await this.checkRateLimit();
-        const response = await this.client.get('/user');
-        return response.data;
+    async testConnection() {
+        try {
+            await this.checkRateLimit();
+            const res = await this.client.get('/projects', { params: this.isUnifiedApi ? { limit: 1 } : undefined });
+            if (res.status === 200) {
+                return true;
+            }
+            return false;
+        }
+        catch (e) {
+            if (e?.response?.status === 401 && this.tokenPlaceholder) {
+                console.error('[TodoistClient] 401 Unauthorized: Placeholder token tespit edildi. Geçerli TODOIST_API_TOKEN .env dosyasına ekleyin.');
+            }
+            return false;
+        }
     }
     async createTasksBatch(tasks) {
         await this.checkRateLimit();
@@ -194,6 +215,35 @@ class TodoistClient {
             remaining: this.rateLimitRemaining,
             reset: this.rateLimitReset,
         };
+    }
+    normalizeListResponse(data) {
+        if (Array.isArray(data))
+            return data;
+        if (data && Array.isArray(data.results))
+            return data.results;
+        return [];
+    }
+    async fetchAllPages(path, params = {}) {
+        if (!this.isUnifiedApi) {
+            const res = await this.client.get(path, { params });
+            return this.normalizeListResponse(res.data);
+        }
+        const all = [];
+        let cursor = undefined;
+        let safety = 0;
+        do {
+            const pageParams = { ...params };
+            if (cursor)
+                pageParams.cursor = cursor;
+            if (!pageParams.limit)
+                pageParams.limit = 200;
+            const res = await this.client.get(path, { params: pageParams });
+            const items = this.normalizeListResponse(res.data);
+            all.push(...items);
+            cursor = res.data?.next_cursor;
+            safety++;
+        } while (cursor && safety < 20);
+        return all;
     }
 }
 exports.TodoistClient = TodoistClient;

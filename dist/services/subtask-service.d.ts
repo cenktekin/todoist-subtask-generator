@@ -20,6 +20,7 @@ export interface SubtaskCreationOptions {
     includeWeekends?: boolean;
     priorityStrategy?: 'inherit' | 'distribute' | 'constant';
     constantPriority?: number;
+    additionalContext?: string;
 }
 export declare class SubtaskService {
     private todoistClient;
@@ -43,6 +44,7 @@ export declare class SubtaskService {
     private addDaysToDate;
     private formatDate;
     getSubtaskCandidates(): Promise<TaskSummary[]>;
+    private estimateOptimalSubtaskCount;
     estimateSubtaskCount(taskId: string): Promise<number>;
 }
 //# sourceMappingURL=subtask-service.d.ts.map

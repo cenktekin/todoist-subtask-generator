@@ -127,6 +127,7 @@ export interface SubtaskGenerationRequest {
   taskDescription?: string;
   dueDate?: string;
   maxSubtasks?: number;
+  additionalContext?: string;
 }
 
 export interface SubtaskGenerationResponse {

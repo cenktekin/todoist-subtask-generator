@@ -4,9 +4,10 @@
   "description": "Todoist task'ları AI ile subtask'lara ayırma ve deadline bazlı tarihlendirme uygulaması",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
-    "dev": "ts-node src/index.ts",
-    "web": "ts-node src/web-server.ts",
+  "build": "tsc",
+  "dev:core": "ts-node src/index.ts",
+  "dev": "ts-node src/web-server.ts",
+  "web": "ts-node src/web-server.ts",
     "start": "node dist/index.js",
     "start:web": "node dist/web-server.js",
     "test": "jest",

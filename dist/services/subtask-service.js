@@ -12,16 +12,16 @@ class SubtaskService {
         try {
             const taskDetails = await this.taskService.getTaskDetails(taskId);
             const task = taskDetails.task;
+            const suggestedMaxSubtasks = this.estimateOptimalSubtaskCount(task.content, task.description, task.due?.date, options.additionalContext);
             const aiRequest = {
                 taskContent: task.content,
                 taskDescription: task.description,
                 dueDate: task.due?.date,
-                maxSubtasks: config_1.config.subtaskGeneration.maxSubtasks,
+                maxSubtasks: suggestedMaxSubtasks,
+                additionalContext: options.additionalContext,
             };
             const aiResponse = await this.aiService.generateSubtasks(aiRequest);
-            const distributedSubtasks = options.distributeByTime
-                ? this.distributeSubtasksByDate(aiResponse.subtasks, task.due?.date, options)
-                : aiResponse.subtasks;
+            const distributedSubtasks = aiResponse.subtasks;
             const prioritizedSubtasks = this.applyPriorityStrategy(distributedSubtasks, task.priority, options);
             const creationResults = await this.createSubtasksInTodoist(taskId, prioritizedSubtasks);
             return {
@@ -34,24 +34,27 @@ class SubtaskService {
         }
         catch (error) {
             console.error('Failed to create subtasks from task:', error);
-            throw new Error(`Failed to create subtasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            if (msg.startsWith('Failed to create subtasks')) {
+                throw error;
+            }
+            throw new Error(`Failed to create subtasks: ${msg}`);
         }
     }
     async generateSubtaskPreview(taskId, options = {}) {
         try {
             const taskDetails = await this.taskService.getTaskDetails(taskId);
             const task = taskDetails.task;
+            const suggestedMaxSubtasks = this.estimateOptimalSubtaskCount(task.content, task.description, task.due?.date, options.additionalContext);
             const aiRequest = {
                 taskContent: task.content,
                 taskDescription: task.description,
                 dueDate: task.due?.date,
-                maxSubtasks: config_1.config.subtaskGeneration.maxSubtasks,
+                maxSubtasks: suggestedMaxSubtasks,
+                additionalContext: options.additionalContext,
             };
             const aiResponse = await this.aiService.generateSubtasks(aiRequest);
             let subtasks = aiResponse.subtasks;
-            if (options.distributeByTime) {
-                subtasks = this.distributeSubtasksByDate(subtasks, task.due?.date, options);
-            }
             subtasks = this.applyPriorityStrategy(subtasks, task.priority, options);
             return {
                 subtasks,
@@ -91,7 +94,7 @@ class SubtaskService {
                 due: subtask.due || undefined
             }));
         }
-        const maxPerDay = options.maxSubtasksPerDay || 3;
+        const maxPerDay = options.maxSubtasksPerDay || 2;
         const includeWeekends = options.includeWeekends ?? false;
         const distribution = options.timeDistribution || 'equal';
         const today = new Date();
@@ -111,8 +114,11 @@ class SubtaskService {
         for (let i = 0; i < subtasks.length; i++) {
             const subtask = { ...subtasks[i] };
             if (subtask.due) {
-                distributedSubtasks.push(subtask);
-                continue;
+                const aiDate = new Date(subtask.due);
+                if (aiDate > today) {
+                    distributedSubtasks.push(subtask);
+                    continue;
+                }
             }
             if (distribution === 'sequential') {
                 const dayIndex = Math.floor(i / subtasksPerDay);
@@ -203,7 +209,7 @@ class SubtaskService {
             }
             currentDate.setDate(currentDate.getDate() + 1);
         }
-        return Math.max(1, days - 1);
+        return Math.max(1, days);
     }
     addDaysToDate(date, days, includeWeekends) {
         const result = new Date(date);
@@ -217,10 +223,113 @@ class SubtaskService {
         return result;
     }
     formatDate(date) {
-        return date.toISOString().split('T')[0];
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     }
     async getSubtaskCandidates() {
         return this.taskService.getTasksForSubtaskGeneration();
+    }
+    estimateOptimalSubtaskCount(taskContent, taskDescription, dueDate, additionalContext) {
+        const text = `${taskContent} ${taskDescription || ''}`.toLowerCase();
+        const wordCount = text.split(/\s+/).length;
+        const complexityKeywords = {
+            high: ['proje', 'sistem', 'geliştir', 'oluştur', 'tasarla', 'analiz', 'araştır', 'öğren', 'eğitim', 'kurs', 'öğret', 'eğit'],
+            medium: ['hazırla', 'planla', 'organize', 'düzenle', 'kontrol', 'test', 'gözden geçir', 'çalış', 'pratik'],
+            low: ['gönder', 'ara', 'oku', 'yaz', 'kaydet', 'güncelle', 'sil', 'kontrol et']
+        };
+        let complexityScore = 0;
+        complexityKeywords.high.forEach(keyword => {
+            if (text.includes(keyword))
+                complexityScore += 3;
+        });
+        complexityKeywords.medium.forEach(keyword => {
+            if (text.includes(keyword))
+                complexityScore += 2;
+        });
+        complexityKeywords.low.forEach(keyword => {
+            if (text.includes(keyword))
+                complexityScore += 1;
+        });
+        let wordFactor = 0;
+        if (wordCount > 50)
+            wordFactor = 3;
+        else if (wordCount > 20)
+            wordFactor = 2;
+        else if (wordCount > 10)
+            wordFactor = 1;
+        const complexityBasedScore = complexityScore + wordFactor;
+        let timeBasedCount = null;
+        let totalDays = null;
+        if (dueDate) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const endDate = new Date(dueDate);
+            endDate.setHours(0, 0, 0, 0);
+            totalDays = Math.max(1, Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+        }
+        if (!totalDays || totalDays <= 1) {
+            const combinedText = `${taskContent} ${taskDescription || ''} ${additionalContext || ''}`;
+            const dayMatch = combinedText.match(/(\d+)\s*gün/i);
+            const weekMatch = combinedText.match(/(\d+)\s*hafta/i);
+            const monthMatch = combinedText.match(/(\d+)\s*ay/i);
+            if (dayMatch) {
+                totalDays = parseInt(dayMatch[1]);
+                console.log(`Extracted ${totalDays} days from context: "${combinedText}"`);
+            }
+            else if (weekMatch) {
+                totalDays = parseInt(weekMatch[1]) * 7;
+                console.log(`Extracted ${weekMatch[1]} weeks = ${totalDays} days from context`);
+            }
+            else if (monthMatch) {
+                totalDays = parseInt(monthMatch[1]) * 30;
+                console.log(`Extracted ${monthMatch[1]} months = ${totalDays} days from context`);
+            }
+        }
+        if (totalDays && totalDays > 1) {
+            let subtasksPerDay = 1.5;
+            if (text.includes('eğitim') || text.includes('kurs') || text.includes('öğren')) {
+                subtasksPerDay = 2;
+            }
+            else if (text.includes('proje') || text.includes('geliştir')) {
+                subtasksPerDay = 2.5;
+            }
+            else if (text.includes('araştır') || text.includes('analiz') || text.includes('plan')) {
+                subtasksPerDay = 1;
+            }
+            else if (complexityScore >= 6) {
+                subtasksPerDay = 1.5;
+            }
+            else if (complexityScore <= 2) {
+                subtasksPerDay = 3;
+            }
+            timeBasedCount = Math.ceil(totalDays * subtasksPerDay);
+            console.log(`Time analysis: ${totalDays} days * ${subtasksPerDay} subtasks/day = ${timeBasedCount} subtasks`);
+        }
+        let complexityBasedCount;
+        if (complexityBasedScore >= 8)
+            complexityBasedCount = 15;
+        else if (complexityBasedScore >= 5)
+            complexityBasedCount = 10;
+        else if (complexityBasedScore >= 3)
+            complexityBasedCount = 6;
+        else if (complexityBasedScore >= 1)
+            complexityBasedCount = 4;
+        else
+            complexityBasedCount = 3;
+        let finalCount;
+        if (timeBasedCount !== null) {
+            finalCount = Math.max(timeBasedCount, complexityBasedCount);
+            console.log(`Task complexity analysis: time-based=${timeBasedCount}, complexity-based=${complexityBasedCount}, chosen=${finalCount}`);
+        }
+        else {
+            finalCount = complexityBasedCount;
+            console.log(`Task complexity analysis: no due date, using complexity-based=${finalCount}`);
+        }
+        const result = Math.min(finalCount, config_1.config.subtaskGeneration.maxSubtasks);
+        console.log(`Task complexity analysis: suggested max ${result} subtasks for "${taskContent.substring(0, 50)}..."`);
+        return result;
     }
     async estimateSubtaskCount(taskId) {
         try {

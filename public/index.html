@@ -4,84 +4,96 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Todoist Subtask Generator</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎯 Todoist Subtask Generator</h1>
-            <p>AI ile Task'larınızı Subtask'lara Ayırın ve Zamanlayın</p>
+            <div class="brand">
+                <h1>🎯 Todoist Subtask Generator</h1>
+                <p>AI destekli planlama & akıllı alt görevler</p>
+            </div>
+            <div class="toolbar">
+                <div class="search-wrapper">
+                    <input type="text" id="searchInput" placeholder="Görev ara... (⌘/Ctrl + K)" autocomplete="off" />
+                    <span class="kbd-hint">⌘K</span>
+                </div>
+                <button class="btn btn-secondary" id="densityToggle" title="Görünüm Yoğunluğu" onclick="toggleDensity()">🪟</button>
+                <button class="btn btn-secondary" id="themeToggle" title="Tema" onclick="toggleTheme()">🌙</button>
+            </div>
         </div>
-        
-        <div class="main-content">
-            <div class="section">
-                <h2>🏥 Sistem Durumu</h2>
-                <div class="health-status" id="healthStatus">
-                    <div class="loading">Yükleniyor...</div>
-                </div>
-            </div>
-            
-            <div class="section">
-                <h2>🔍 Filtreler</h2>
-                <div class="filters-container">
-                    <div class="filter-group">
-                        <label for="projectFilter">Proje:</label>
-                        <select id="projectFilter">
-                            <option value="">Tüm Projeler</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label for="labelFilter">Etiket:</label>
-                        <select id="labelFilter">
-                            <option value="">Tüm Etiketler</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label for="priorityFilter">Öncelik:</label>
-                        <select id="priorityFilter">
-                            <option value="">Tüm Öncelikler</option>
-                            <option value="4">Yüksek (P1)</option>
-                            <option value="3">Orta (P2)</option>
-                            <option value="2">Normal (P3)</option>
-                            <option value="1">Düşük (P4)</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label for="dateFilter">Tarih:</label>
-                        <select id="dateFilter">
-                            <option value="">Tüm Tarihler</option>
-                            <option value="today">Bugün</option>
-                            <option value="overdue">Geçmiş</option>
-                            <option value="7days">7 Gün İçinde</option>
-                            <option value="30days">30 Gün İçinde</option>
-                        </select>
-                    </div>
-                    <div class="filter-actions">
-                        <button class="btn btn-primary" onclick="applyFilters()">Filtrele</button>
-                        <button class="btn btn-secondary" onclick="clearFilters()">Temizle</button>
+
+        <div class="layout">
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">🏥 Sistem</h3>
+                    <div class="health-status" id="healthStatus">
+                        <div class="loading">Yükleniyor...</div>
                     </div>
                 </div>
-            </div>
-            
-            <div class="section">
-                <h2>📋 Task Listesi</h2>
-                <div class="controls">
-                    <button class="btn btn-primary" onclick="loadTasks()">Task'ları Yenile</button>
-                    <button class="btn btn-secondary" onclick="loadSubtaskCandidates()" id="candidatesBtn" disabled>Subtask Adaylarını Göster</button>
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">🔍 Filtreler</h3>
+                    <div class="filters-container">
+                        <div class="filter-group">
+                            <label for="projectFilter">Proje</label>
+                            <select id="projectFilter">
+                                <option value="">Tümü</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="labelFilter">Etiket</label>
+                            <select id="labelFilter">
+                                <option value="">Tümü</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="priorityFilter">Öncelik</label>
+                            <select id="priorityFilter">
+                                <option value="">Tümü</option>
+                                <option value="4">Yüksek (P1)</option>
+                                <option value="3">Orta (P2)</option>
+                                <option value="2">Normal (P3)</option>
+                                <option value="1">Düşük (P4)</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="dateFilter">Tarih</label>
+                            <select id="dateFilter">
+                                <option value="">Tümü</option>
+                                <option value="today">Bugün</option>
+                                <option value="overdue">Geçmiş</option>
+                                <option value="7days">7 Gün</option>
+                                <option value="30days">30 Gün</option>
+                            </select>
+                        </div>
+                        <div class="filter-actions">
+                            <button class="btn btn-primary full-width" onclick="applyFilters()">Uygula</button>
+                            <button class="btn btn-secondary full-width" onclick="clearFilters()">Temizle</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="sidebar-section quick-actions">
+                    <h3 class="sidebar-title">⚡ Hızlı</h3>
+                    <button class="btn btn-primary full-width" onclick="loadTasks()">↻ Yenile</button>
+                    <button class="btn btn-secondary full-width" onclick="loadSubtaskCandidates()" id="candidatesBtn" disabled>Adaylar</button>
+                </div>
+            </aside>
+
+            <main class="content">
+                <div class="content-header">
+                    <h2>📋 Görevler <span id="taskCount" class="count-badge"></span></h2>
+                    <div class="inline-actions" id="selectionActions" style="display:none;">
+                        <button class="btn btn-primary" onclick="showSubtaskPreview()" id="previewBtn" disabled>👁️ Önizleme</button>
+                        <button class="btn btn-success" onclick="createSubtasks()" id="createBtn" disabled>✨ Oluştur</button>
+                        <!-- Çizelge özelliği geçici olarak devre dışı -->
+                        <!-- <button class="btn btn-secondary" onclick="showSchedule()" id="scheduleBtn" disabled>📅 Çizelge Önizleme</button> -->
+                    </div>
                 </div>
                 <div class="task-list" id="taskList">
                     <div class="loading">Task'lar yükleniyor...</div>
                 </div>
-            </div>
-            
-            <div class="section">
-                <h2>🔧 İşlemler</h2>
-                <div class="controls">
-                    <button class="btn btn-primary" onclick="showSubtaskPreview()" id="previewBtn" disabled>Subtask Önizleme</button>
-                    <button class="btn btn-success" onclick="createSubtasks()" id="createBtn" disabled>Subtask Oluştur</button>
-                    <button class="btn btn-secondary" onclick="showSchedule()" id="scheduleBtn" disabled>Zaman Çizelgesi</button>
-                </div>
-            </div>
+            </main>
         </div>
     </div>
     
@@ -96,7 +108,8 @@
         </div>
     </div>
     
-    <!-- Schedule Modal -->
+    <!-- Çizelge özelliği geçici olarak devre dışı -->
+    <!--
     <div id="scheduleModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -104,6 +117,62 @@
                 <span class="close" onclick="closeModal('scheduleModal')">&times;</span>
             </div>
             <div id="scheduleContent"></div>
+        </div>
+    </div>
+    -->
+    
+    <!-- Additional Context Modal -->
+    <div id="contextModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>💡 Ek Bağlam Ekle</h3>
+                <span class="close" onclick="closeModal('contextModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p>Bu görev hakkında LLM'ye ek bilgi vermek ister misiniz? (İsteğe bağlı)</p>
+                <textarea id="additionalContext" placeholder="Örneğin: Bu görev için hangi araçları kullanmalıyım? Hangi kısımlar daha önemli? vb." rows="4"></textarea>
+                
+                <!-- Tarihlendirme özellikleri geçici olarak devre dışı - çalışma durumunda sorun var -->
+                <!--
+                <div class="schedule-options">
+                    <div class="option-group">
+                        <input type="checkbox" id="enableScheduling" onchange="toggleScheduleOptions()">
+                        <label for="enableScheduling"><strong>📅 Subtask'ları tarihlendirmek istiyorum</strong></label>
+                    </div>
+                    
+                    <div id="scheduleSettings" class="schedule-settings" style="display: none;">
+                        <div class="setting-row">
+                            <label for="timeDistribution">Dağıtım Stratejisi:</label>
+                            <select id="timeDistribution">
+                                <option value="equal">Eşit Dağıtım</option>
+                                <option value="sequential">Sıralı Dağıtım</option>
+                                <option value="weighted">Öncelik Tabanlı</option>
+                            </select>
+                        </div>
+                        
+                        <div class="setting-row">
+                            <label for="maxSubtasksPerDay">Günlük Max Subtask:</label>
+                            <select id="maxSubtasksPerDay">
+                                <option value="1">1 subtask/gün</option>
+                                <option value="2" selected>2 subtask/gün</option>
+                                <option value="3">3 subtask/gün</option>
+                                <option value="4">4 subtask/gün</option>
+                                <option value="5">5 subtask/gün</option>
+                            </select>
+                        </div>
+                        
+                        <div class="setting-row">
+                            <input type="checkbox" id="includeWeekends">
+                            <label for="includeWeekends">Hafta sonları dahil et</label>
+                        </div>
+                    </div>
+                </div>
+                -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('contextModal')">İptal</button>
+                <button class="btn btn-primary" onclick="proceedWithSubtasks()">Devam Et</button>
+            </div>
         </div>
     </div>
     

@@ -16,11 +16,30 @@ Todoist üzerindeki task'ları seçerek **AI (Türkçe)** yardımıyla mantıkl�
 - **Türkçe Terminoloji**: UI ve AI çıktıları Türkçeleştirilmiş
 - **Güvenlik Odaklı Repo Temizliği**: Arşivleme stratejisi ve hassas veri taraması yönergeleri
 
-## 📋 Gereksinimler
+## � Ekran Görüntüleri
+
+### Web Arayüzü - Ana Ekran
+![Ana Ekran](./Ekran%20Görüntüsü_20250920_223612.png)
+*Modern ve temiz web arayüzü ile görev yönetimi*
+
+### Görev Filtreleme ve Seçim
+![Görev Filtreleme](./Ekran%20Görüntüsü_20250920_223629.png)  
+*Proje, etiket, öncelik ve tarih bazlı gelişmiş filtreleme seçenekleri*
+
+### Subtask Önizleme
+![Subtask Önizleme](./Ekran%20Görüntüsü_20250920_223651.png)
+*AI tarafından üretilen subtask'ların önizlemesi ve düzenleme seçenekleri*
+
+### Akıllı Zaman Hesaplama
+![Zaman Hesaplama](./Ekran%20Görüntüsü_20250920_223746.png)
+*"15 gün süre ayıracağım" gibi doğal dil işleme ile akıllı subtask sayısı hesaplama*
+
+## �📋 Gereksinimler
 
 - Node.js 18.0.0 veya üstü
+### Required Environment Variables
 - Todoist API Token (https://todoist.com/app/integrations/api-token)
-- OpenRouter API Key (https://openrouter.ai/keys)
+| `TODOIST_API_TOKEN` | Todoist API token (Unified API v1 veya eski REST v2). Uygulama bağlantıyı `/projects` isteği ile test eder. Placeholder token bırakırsanız 401 alırsınız. |
 
 ## 🛠️ Kurulum
 
@@ -40,15 +59,22 @@ npm install
 cp .env.example .env
 ```
 
+> Eğer önceki `.env` dosyanızı güvenlik için `archive/` altına taşıdıysanız, test için yeniden oluşturmak adına bu adım yeterlidir. `archive/` içindeki eski dosyayı geri getirmenize gerek yok; sadece gerekli iki zorunlu değişkeni (`TODOIST_API_TOKEN`, `OPENROUTER_API_KEY`) yeni `.env` içine girin.
+
 4. **.env dosyasını düzenleyin**:
   - Kendi Todoist API token'ınızı kopyalayın: https://todoist.com/app/integrations/api-token
   - Kendi OpenRouter API anahtarınızı oluşturun: https://openrouter.ai/keys
   - `.env` dosyasını düzenleyerek kendi token'larınızı ekleyin
   - **ÖNEMLİ**: Gerçek token'larınızı asla Git'e commitlemeyin!
+  - Ek opsiyonel değerler için `.env.example` içindeki yorumları okuyun (model, log seviyesi, batch ayarları vs.)
 
 5. **Uygulamayı başlatın**:
 ```bash
+# Web arayüzü + API birlikte
 npm run dev
+
+# Sadece çekirdek servisleri (web olmadan) çalıştırmak istersen
+npm run dev:core
 ```
 
 ## 📖 Kullanım
@@ -58,7 +84,7 @@ npm run dev
 Uygulamanın ana kullanım şekli modern web arayüzüdür.
 
 1. Ortam değişkenlerini `.env` içinde tanımlayın (`TODOIST_API_TOKEN`, `OPENROUTER_API_KEY`)
-2. Geliştirme sunucusunu başlatın:
+2. Geliştirme sunucusunu başlatın (web arayüzü dahil):
 ```bash
 npm run dev
 ```
@@ -157,15 +183,29 @@ Arayüz ayrıca aşırı geniş sonuçlarda client-side ek süzgeç uygulayarak 
 
 ## 🔧 API Referansı
 
-### Todoist API Endpoint'leri
+### Todoist API Sürüm Notu
 
-- `GET /rest/v1/tasks` - Task listesini getirir
-- `POST /rest/v1/tasks` - Yeni task oluşturur
-- `GET /rest/v1/tasks/{id}` - Belirli task'ı getirir
-- `POST /rest/v1/tasks/{id}` - Task'ı günceller
-- `DELETE /rest/v1/tasks/{id}` - Task'ı siler
-- `GET /rest/v1/projects` - Proje listesini getirir
-- `GET /rest/v1/labels` - Etiket listesini getirir
+Todoist yakın zamanda REST v2 + Sync v9 birleşimini sağlayan **Unified API v1** (örn: `https://api.todoist.com/api/v1/...`) yapısını duyurdu. Bu projede varsayılan `baseUrl` halen `https://api.todoist.com/rest/v2` olarak bırakıldı çünkü mevcut kod mantıksal olarak REST şemasına göre yazıldı ve v1 geçişi sırasında minimal değişiklik hedeflendi. 
+
+`src/api/todoist-client.ts` içindeki istemci aşağıdaki şekilde davranır:
+* `config.todoist.baseUrl` `/api/v1` içerirse pagination'lı `{ results: [], next_cursor }` yapısını algılar ve normalize eder.
+* `/rest/v2` kullanımında eski düz array formatını bekler.
+* Placeholder token (ör: `your_todoist_api_token_here`) tespit edilirse konsola uyarı yazar ve 401 durumunda özel açıklama verir.
+
+Gelecekte Unified API v1'e tam geçiş için yapılabilecekler (`tasks.md` içine aktarılabilir):
+1. `baseUrl` varsayılanını `/api/v1` yap
+2. Tüm listeleme çağrılarını `fetchAllPages` kullanarak tamamını çek (şu an sadece ilk sayfa gerektiğinde yeterli)
+3. Yeni `/api/v1/tasks/filter` endpoint'ini gelişmiş arama için entegre et (REST v2 `filter` parametresi kalktı)
+4. Gerekirse proje / label CRUD operasyonları için v1 spesifik genişletmeler ekle
+
+Hızlı test için örnek istek (token ile):
+```bash
+curl -H "Authorization: Bearer $TODOIST_API_TOKEN" https://api.todoist.com/rest/v2/projects
+```
+veya v1:
+```bash
+curl -H "Authorization: Bearer $TODOIST_API_TOKEN" 'https://api.todoist.com/api/v1/projects?limit=1'
+```
 
 ### Rate Limitler
 
@@ -342,4 +382,4 @@ Proje hoşuna gittiyse ⭐ vererek veya destek olarak motive edebilirsin.
 
 ---
 
-**Not**: Bu uygulama Todoist API v1 kullanılarak geliştirilmiştir. API değişiklikleri olduğunda güncelleme yapılması gerekebilir.
+**Not**: Uygulama REST v2 ile uyumlu çalışacak şekilde başlatıldı; istemci Unified API v1 yanıt biçimini de otomatik normalize eder. API kırıcı değişikliklerinde `todoist-client.ts` güncellenmelidir.

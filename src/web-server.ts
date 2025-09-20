@@ -140,6 +140,7 @@ webApp.post('/api/tasks/:taskId/subtasks', async (req: Request, res: Response) =
   try {
     const { taskId } = req.params;
     const options = req.body;
+    logger.info('DEBUG: Received subtask creation request:', { taskId, options });
     const result = await app.createSubtasksFromTask(taskId, options);
     res.json(result);
   } catch (error) {

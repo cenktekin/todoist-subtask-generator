@@ -6,7 +6,9 @@ export const config = {
   // Todoist API Configuration
   todoist: {
     apiToken: process.env.TODOIST_API_TOKEN || '',
-    baseUrl: 'https://api.todoist.com/rest/v1',
+    // REST v2 is the current (deprecated but still active) stable endpoint; unified API v1 replaces it,
+    // but our client targets the REST schema. Ensure we point to /rest/v2 to avoid 404s on v2-only paths.
+    baseUrl: 'https://api.todoist.com/rest/v2',
     rateLimit: {
       requestsPerMinute: 60,
       requestsPerHour: 1000,
@@ -45,7 +47,7 @@ export const config = {
 
   // Subtask Generation Configuration
   subtaskGeneration: {
-    maxSubtasks: parseInt(process.env.MAX_SUBTASKS || '10'),
+    maxSubtasks: parseInt(process.env.MAX_SUBTASKS || '25'), // Artırıldı: basit görevler 5-10, karmaşık görevler 15-25
     minSubtaskLength: parseInt(process.env.MIN_SUBTASK_LENGTH || '5'),
     maxSubtaskLength: parseInt(process.env.MAX_SUBTASK_LENGTH || '100'),
   },

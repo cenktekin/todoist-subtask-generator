@@ -74,9 +74,13 @@ class TodoistSubtaskApp {
     }
     async testTodoistConnection() {
         try {
-            const user = await this.todoistClient.getUser();
-            logger.info(`Connected to Todoist as: ${user.name}`);
-            return true;
+            const ok = await this.todoistClient.testConnection();
+            if (ok) {
+                logger.info('Connected to Todoist (projects fetch succeeded)');
+                return true;
+            }
+            logger.warn('Todoist connection test failed');
+            return false;
         }
         catch (error) {
             logger.error('Todoist connection failed:', error);
@@ -338,8 +342,10 @@ class TodoistSubtaskApp {
         };
         try {
             try {
-                await this.todoistClient.getUser();
-                healthCheck.services.todoist = 'up';
+                const ok = await this.todoistClient.testConnection();
+                healthCheck.services.todoist = ok ? 'up' : 'down';
+                if (!ok)
+                    healthCheck.status = 'unhealthy';
             }
             catch (error) {
                 healthCheck.services.todoist = 'down';

@@ -38,6 +38,7 @@ export class TaskService {
   async getTasksWithFilters(filters: TaskFilter = {}): Promise<TaskSummary[]> {
     try {
       let tasks = await this.todoistClient.getTasks();
+      let labelsData: TodoistLabel[] | null = null;
 
       // Apply filters
       if (filters.projectId) {
@@ -45,7 +46,13 @@ export class TaskService {
       }
 
       if (filters.label) {
-        tasks = tasks.filter(task => task.labels.includes(filters.label!));
+        // Lazy load labels only if needed
+        labelsData = labelsData || await this.todoistClient.getLabels();
+        const target = filters.label.toLowerCase();
+        // Try to map label name to id; else assume it's an id
+        const labelObj = labelsData.find(l => l.name.toLowerCase() === target || l.id === filters.label);
+        const labelId = labelObj ? labelObj.id : filters.label;
+        tasks = tasks.filter(task => task.labels.includes(labelId));
       }
 
       if (filters.priority) {
@@ -105,7 +112,7 @@ export class TaskService {
       // Get projects and labels for better display
       const [projects, labels] = await Promise.all([
         this.todoistClient.getProjects(),
-        this.todoistClient.getLabels(),
+        labelsData ? Promise.resolve(labelsData) : this.todoistClient.getLabels(),
       ]);
 
       // Convert to TaskSummary with enhanced information
@@ -352,10 +359,9 @@ export class TaskService {
   }
 
   async getHighPriorityTasks(): Promise<TaskSummary[]> {
-    return this.getTasksWithFilters({ 
-      status: 'active',
-      priority: 4
-    });
+    // Return tasks with priority >=3 (Todoist high priorities)
+    const tasks = await this.getTasksWithFilters({ status: 'active' });
+    return tasks.filter(t => t.priority >= 3);
   }
 
   async getTasksWithoutDueDate(): Promise<TaskSummary[]> {
