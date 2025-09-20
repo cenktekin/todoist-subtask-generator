@@ -239,6 +239,30 @@ Depo bakım süreci için adımlar (detaylı workflow `repo-cleanup.chatmode.md`
 7. Conventional commit mesajı ile commit
 8. `git push` + README bakım notu ekleme
 
+### Son Bakım Kaydı (Maintenance Log)
+
+- 2025-09-20: `node_modules/` dizini ilk commit sırasında yanlışlıkla repoya eklenmişti. `.gitignore` güncellendi ve `git rm -r --cached node_modules` ile versiyon kontrolünden çıkarıldı. Yeni klonlayan kullanıcılar `npm install` sonrasında bağımlılıkları lokal olarak oluşturabilir. Eğer repoyu fork'ladıysanız ve kendi fork'unuzda da aynı problem varsa aynı adımları uygulayın.
+
+İsteğe bağlı (boyutu küçültmek için geçmişi temizleme):
+
+```bash
+# NOT: Bu işlem commit hash'lerini değiştirir. Paylaşımlı repo ise ekip ile koordine edin.
+pip install git-filter-repo  # veya brew install git-filter-repo
+git filter-repo --path node_modules --invert-paths
+git push --force origin main
+```
+
+Alternatif hızlı yöntem (BFG Repo-Cleaner):
+
+```bash
+java -jar bfg.jar --delete-folders node_modules --delete-files node_modules --no-blob-protection .
+git reflog expire --expire=now --all
+git gc --prune=now --aggressive
+git push --force origin main
+```
+
+Eğer proje henüz yaygın paylaşılmadıysa history rewrite güvenlidir; aksi halde sadece mevcut durumun temiz kalması yeterlidir.
+
 ## 🚀 Dağıtım
 
 ### Docker
