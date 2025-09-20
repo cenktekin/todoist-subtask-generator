@@ -361,14 +361,23 @@ Detaylar için: `tasks.md`
 
 ## 🤝 Katkı
 
-Katkılarınızı memnuniyetle karşılıyoruz!
+Katkılarınızı memnuniyetle karşılıyoruz! Detaylı bilgi için lütfen [CONTRIBUTING.md](CONTRIBUTING.md) dosyasını okuyun.
+
+### Hızlı Başlangıç
 
 1. Bu repoyu forklayın
 2. Yeni bir branch oluşturun (`git checkout -b feature/amazing-feature`)
-3. Değişikliklerinizi yapın
-4. Commit yapın (`git commit -m 'Add amazing feature'`)
+3. Değişikliklerinizi yapın ve test edin
+4. [Conventional Commits](https://conventionalcommits.org/) formatında commit yapın
 5. Branch'i pushlayın (`git push origin feature/amazing-feature`)
 6. Pull request oluşturun
+
+### Community Guidelines
+
+- [Code of Conduct](CODE_OF_CONDUCT.md) - Topluluk davranış kuralları
+- [Contributing Guide](CONTRIBUTING.md) - Detaylı katkı rehberi  
+- [Security Policy](SECURITY.md) - Güvenlik açığı bildirimi süreci
+- [Issue Templates](.github/ISSUE_TEMPLATE/) - Bug report ve feature request şablonları
 
 ## 📄 Lisans
 
