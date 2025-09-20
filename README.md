@@ -297,11 +297,17 @@ npm start
 
 ## 🔄 Yol Haritası (Roadmap)
 
-- [ ] Etkileşimli tarih sürükle-bırak zaman çizelgesi
-- [ ] Tahmini sürelerin AI ile otomatik kalibrasyonu
-- [ ] Label bazlı otomatik öncelik profili
-- [ ] Offline cache
-- [ ] Websocket ile canlı güncelleme
+Artık detaylı yol haritası, epik ayrımları, user story'ler, kabul kriterleri ve sprint planı `tasks.md` dosyasına taşındı.
+
+Özet (yüksek seviye başlıklar):
+* Zaman Çizelgesi UX geliştirmeleri
+* AI zekâ katmanı (öğrenen süre & öncelik tahmini)
+* İş birliği / paylaşım özellikleri
+* Analitik & raporlama
+* Performans ve güvenilirlik sertleşmesi
+* Geliştirici deneyimi ve CI/CD
+
+Detaylar için: `tasks.md`
 
 ## 🤝 Katkı
 
